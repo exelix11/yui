@@ -1,0 +1,5 @@
+_bin/
+.vscode/
+bin/
+obj/
+sysupdate-*
