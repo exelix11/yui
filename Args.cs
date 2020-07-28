@@ -14,6 +14,7 @@ namespace yui
         public bool get_help = false;
 
         // Context relevant information
+        public bool tencent = false;
         public bool ignore_warnings = false;
         public string cert_loc = "nx_tls_client_cert.pem";
         public string keyset_loc = "~/.switch/prod.keys";
@@ -75,6 +76,10 @@ namespace yui
                 case "-fwver":
                     this.firmware_version = raw_args[++i];
                     break;
+                case "--tencent":
+                case "-t":
+                    this.tencent = true;
+                    break;
                 case "--get-info":
                 case "--info":
                 case "-i":
@@ -109,6 +114,7 @@ namespace yui
                 + "--latest|--get-latest|-l                         Downloads the latest version from cdn\n"
                 + "--help|-h                                        Prints this text and exits\n"
                 + "--ignore-warnings|-q                             Ignores warnings and assumes 'y' for prompts\n"
+                + "--tencent|-t                                     Use the tencent servers for all requests\n"
                 + "--cert|-c    path/to/cert.pem                    Path to a switch ssl certificate.\n"
                 + "                                                 Defaults to 'nx_tls_client_cert.pem'\n"
                 + "--keyset|-k  path/to/prod.keys                   Path to a switch keyset.\n"

@@ -11,15 +11,25 @@ namespace yui
 {
     class SysUpdateHandler: System.IDisposable
     {
-        private string CDN_URL = "https://atumn.hac.lp1.d4c.nintendo.net";
-        private string CDN_TEMPLATE = "{0}/{1}/{2}/{3}/{4}?device_id={4}";
-        private string SUN_URL = "https://sun.hac.lp1.d4c.nintendo.net/v1";
+        private string CDN_URL;
+        private string SUN_URL;
         private Session session;
+        private string CDN_TEMPLATE = "{0}/{1}/{2}/{3}/{4}?device_id={4}";
         public HandlerArgs args;
         public SysUpdateHandler(string[] args)
         {
             this.args = new HandlerArgs(args);
             this.session = new Session(ref this.args);
+
+            if (this.args.tencent) {
+                this.CDN_URL = "https://atumn.hac.lp1.d4c.n.nintendoswitch.cn";
+                this.SUN_URL = "https://sun.hac.lp1.d4c.n.nintendoswitch.cn/v1";
+            }
+            else {
+                this.CDN_URL = "https://atumn.hac.lp1.d4c.nintendo.net";
+                this.SUN_URL = "https://sun.hac.lp1.d4c.nintendo.net/v1";
+            
+            }
         }
         public void Dispose() {}
 
@@ -163,3 +173,4 @@ namespace yui
         }
     }
 }
+
