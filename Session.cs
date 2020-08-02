@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Net;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 using Newtonsoft.Json;
@@ -20,20 +19,8 @@ namespace yui
             this.cert = LoadCert(args.cert_loc);
         }
 
-        // thanks to exelix and https://github.com/dotnet/runtime/issues/19581#issuecomment-581147166
-        // for this
-        public X509Certificate2 LoadCert(string cert_path)
-        {
-            using var public_key = new X509Certificate2(cert_path);
-            using var rsa = RSA.Create();
-            var raw_key_text = File.ReadAllText(cert_path);
-            var priv_key_text = raw_key_text.Split("END PRIVATE KEY")[0].Split('-', StringSplitOptions.RemoveEmptyEntries)[1];
-            var priv_key_bytes = Convert.FromBase64String(priv_key_text);
-            rsa.ImportPkcs8PrivateKey(priv_key_bytes, out _);
-            var key_pair = public_key.CopyWithPrivateKey(rsa);
-
-            return new X509Certificate2(key_pair.Export(X509ContentType.Pfx));
-        }
+        public X509Certificate2 LoadCert(string cert_path) =>
+            CertLoader.FromFile(cert_path);
 
         public HttpWebResponse Request(string method, string url)
         {
