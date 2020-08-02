@@ -3,7 +3,6 @@ using System.IO;
 
 using LibHac;
 
-
 namespace yui
 {
     class HandlerArgs
@@ -17,7 +16,7 @@ namespace yui
         public bool tencent = false;
         public bool ignore_warnings = false;
         public string cert_loc = "nx_tls_client_cert.pem";
-        public string keyset_loc = "~/.switch/prod.keys";
+        public string keyset_loc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".switch/prod.keys");
         public Keyset keyset = null;
         public string out_path = null;
         public string device_id = "DEADCAFEBABEBEEF";
