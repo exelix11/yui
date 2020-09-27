@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using LibHac.Fs;
 
 namespace yui
@@ -14,14 +15,17 @@ namespace yui
 
 		string OutPath;
 
-		public SysUpdateHandler(string[] args)
+		public SysUpdateHandler(string[] cmdArgs)
 		{
-			Args = new HandlerArgs(args);
+			Args = new HandlerArgs(cmdArgs);
+
+			if (Args.verbose)
+				Trace.Listeners.Add(new TextWriterTraceListener(Console.Out));
 
 			yui = new Yui(new YuiConfig {
 				ContentHandler = StoreContent,
 				MetaHandler = StoreMeta,
-				MaxParallelism = 5,
+				MaxParallelism = Args.max_jobs,
 				Keyset = Args.keyset,
 				Client = new CdnClientConfig {
 					DeviceID = Args.device_id,
@@ -90,6 +94,9 @@ namespace yui
 
 			Console.WriteLine("Parsing update entries...");
 			var metaEntries = yui.GetContentEntries(new MemoryStorage(update.Data));
+
+			if (Args.title_filter != null)
+				metaEntries = metaEntries.Where(x => Args.title_filter.Contains(x.ID)).ToArray();
 
 			Console.WriteLine($"Downloading {metaEntries.Length} meta titles...");
 			var contentEntries = yui.ProcessMeta(metaEntries);
