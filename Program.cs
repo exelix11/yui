@@ -12,7 +12,6 @@
                 if (ctx.Args.get_latest)
                     ctx.GetLatest();
             }
-
         }
     }
 }
