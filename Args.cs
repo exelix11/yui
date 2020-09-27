@@ -17,13 +17,14 @@ namespace yui
         public bool ignore_warnings = false;
         public string cert_loc = "nx_tls_client_cert.pem";
         public string keyset_loc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".switch/prod.keys");
-        public Keyset keyset = null;
-        public string out_path = null;
+        public Keyset? keyset = null;
+        public string? out_path = null;
         public string device_id = "DEADCAFEBABEBEEF";
         public string env = "lp1";
         public string server = "d4c";
         public string platform = "NX";
         public string firmware_version = "5.1.0-3";
+        
         public HandlerArgs(string[] raw_args)
         {
             ParseArgs(raw_args);
@@ -122,6 +123,7 @@ namespace yui
                 + "                                                 Defaults to 'sysupdate-[intver]-[semver]_bn-[buildnum]'\n"
             );
         }
+
         private void InitStuff()
         {
             this.cert_loc = Path.GetFullPath(this.cert_loc);
@@ -134,6 +136,4 @@ namespace yui
                 this.keyset = ExternalKeyReader.ReadKeyFile(keyset_loc);
         }
     }
-
-
 }
