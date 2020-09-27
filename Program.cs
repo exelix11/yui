@@ -6,11 +6,11 @@
         {    
             using (var ctx = new SysUpdateHandler(args))
             {
-                if (ctx.args.get_info)
+                if (ctx.ParsedArgs.get_info)
                     ctx.PrintLatestSysVersion();
             
-                if (ctx.args.get_latest)
-                    ctx.GetLatestFull(ctx.args.out_path);
+                if (ctx.ParsedArgs.get_latest)
+                    ctx.GetLatest(ctx.ParsedArgs.out_path);
             }
 
         }
