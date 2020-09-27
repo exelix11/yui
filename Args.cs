@@ -24,7 +24,10 @@ namespace yui
         public string server = "d4c";
         public string platform = "NX";
         public string firmware_version = "5.1.0-3";
-        
+        public int max_jobs = 5;
+        public string[]? title_filter;
+        public bool verbose = false;
+
         public HandlerArgs(string[] raw_args)
         {
             ParseArgs(raw_args);
@@ -99,6 +102,16 @@ namespace yui
                 case "-h":
                     this.get_help = true;
                     break;
+                case "--jobs":
+                case "-j":
+                    this.max_jobs = Math.Min(int.Parse(raw_args[++i]), 1);
+                    break;
+                case "--titles":
+                    this.title_filter = raw_args[++i].Split(',');
+                    break;
+                case "-v":
+                    this.verbose = true;
+                    break;
                 }
             }
         }
@@ -121,6 +134,9 @@ namespace yui
                 + "                                                 Defaults to '~/.switch/prod.keys'\n"
                 + "--out|--out-path|-o  path                        Outpath for the --latest mode.\n"
                 + "                                                 Defaults to 'sysupdate-[intver]-[semver]_bn-[buildnum]'\n"
+                + "--jobs|-j    max jobs                            Max concurrent downloads, default is 5\n"
+                + "--titles     010000001000,0100000010001...       Only download specified titles, takes a comma separated list of title IDs\n"
+                + "-v                                               Verbose mode\n"
             );
         }
 
