@@ -180,9 +180,16 @@ namespace yui
 			var contentEntries = yui.ProcessMeta(metaEntries);
 			CompleteProgressReport();
 
-			BeginProgressReport("Downloading {0} content(s)... ", contentEntries.Length);
-			yui.ProcessContent(contentEntries);
-			CompleteProgressReport();
+			if (Args.OnlyMeta)
+			{
+				Console.WriteLine("Downloading content has been skipped as requested.");
+			}
+			else
+			{
+				BeginProgressReport("Downloading {0} content(s)... ", contentEntries.Length);
+				yui.ProcessContent(contentEntries);
+				CompleteProgressReport();
+			}
 
 			Console.WriteLine($"All done !");
 		}

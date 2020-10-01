@@ -28,6 +28,7 @@ namespace yui
         public string[]? TitleFilter    { get; private set; } = null;
         public bool ConsoleVerbose      { get; private set; } = false;
         public string? FileVerbose      { get; private set; } = null;
+        public bool OnlyMeta            { get; private set; } = false;
 
         class Handler
         {
@@ -83,6 +84,7 @@ namespace yui
                 new Handler (Aliases: new[] { "--tencent", "-t" },               Fn: () => Tencent = true ),
                 new Handler (Aliases: new[] { "--ignore-warnings",
                                                "--no-confirm", "-q" },           Fn: () => IgnoreWarnings = true ),
+                new Handler (Aliases: new[] { "--only-meta" },                   Fn: () => OnlyMeta = true)
             };
 
             for (int i = 0; i < raw_args.Length; ++i)
@@ -130,6 +132,7 @@ namespace yui
                 + "--titles     010000001000,0100000010001...       Only download specified titles, takes a comma separated list of title IDs\n"
                 + "-v                                               Verbose mode\n"
                 + "-vf          path/to/log.txt                     Verbose log to file\n"
+                + "--only-meta                                      Only download and parse meta entries\n"
             );
         }
     }
