@@ -152,7 +152,7 @@ namespace yui
 		// After downloading meta NCAs we need to parse them, so return the data as well instead of reading it back from disk
 		private byte[] DownloadMeta(string titleID, string version)
 		{
-			var response = Client.GetMeta(titleID, version);
+			using var response = Client.GetMeta(titleID, version);
 			byte[] data = response.ContentAsBuffer();
 			Config.MetaHandler?.Invoke(data, titleID, response.XNContentID(), version, response.RequestMessage.RequestUri.ToString());
 			return data;
@@ -192,7 +192,7 @@ namespace yui
 
 			Parallel.ForEach(info, new ParallelOptions { MaxDegreeOfParallelism = Config.MaxParallelism }, x =>
 			{
-				var response = Client.GetContent(x.ID);
+				using var response = Client.GetContent(x.ID);
 				Config.ContentHandler(response.ContentAsStream(), x.ID, response.RequestMessage.RequestUri.ToString());
 			});
 		}

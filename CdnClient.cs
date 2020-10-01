@@ -79,15 +79,13 @@ namespace yui
 		public T GetJson<T>(string url)
 		{
 			T json = JsonConvert.DeserializeObject<T>(GetString(url));
-			return json ?? throw new ArgumentNullException(nameof(json));
+			return json ?? throw new Exception("Deserialized object is null");
 		}
 
 		public dynamic GetJson(string url) => GetJson<dynamic>(url);
 
-		public UpdateInfo GetLatestUpdateInfo()
-		{
-			return GetJson<UpdateInfo>($"{this.SunUrl}/system_update_meta?device_id={Config.DeviceID}");
-		}
+		public UpdateInfo GetLatestUpdateInfo() =>
+			GetJson<UpdateInfo>($"{this.SunUrl}/system_update_meta?device_id={Config.DeviceID}");
 
 		public HttpResponseMessage GetUpdateMeta(string titleID, string titleVersion) =>
 			Get(String.Format("{0}/{1}/{2}/{3}/{4}?device_id={4}", CdnUrl, "t", (titleID == "0100000000000816") ? "s" : "a", titleID, titleVersion, Config.DeviceID));

@@ -19,6 +19,9 @@ namespace yui
 
 		public ProgressReporter(int max)
 		{
+			if (Console.IsOutputRedirected)
+				throw new Exception("Can't reposition the console cursor when output is redirected");
+
 			Max = max;
 			Cursor = (Console.CursorLeft, Console.CursorTop);
 		}
@@ -40,12 +43,10 @@ namespace yui
 			Interlocked.Increment(ref Cur);
 			// Don't need to update the terminal output every time
 			if (Monitor.TryEnter(this))
-				// Don't waste time updating the screen in the download thread
-				Task.Run(() =>
-				{
-					UpdateVal($"{Cur} / {Max}");
-					Monitor.Exit(this);
-				});
+			{
+				UpdateVal($"{Cur} / {Max}");
+				Monitor.Exit(this);
+			};
 		}
 
 		// Should be called once all threaded operations are finished
@@ -98,7 +99,8 @@ namespace yui
 
 			Trace.WriteLine($"[GotContent] [{data.Length}] {url ?? ""} => {path}");
 			using FileStream fs = File.OpenWrite(path);
-			data.CopyTo(fs);
+			data.CopyTo(fs, 16 * 1024 * 1024);
+			data.Dispose();
 
 			CurrentReporter?.Increment();
 		}
@@ -139,7 +141,8 @@ namespace yui
 		private void BeginProgressReport(string message, int max)
 		{
 			Console.Write(message, max);
-			if (!Args.ConsoleVerbose) // With verbose args progress reporting is useless
+			// With verbose args progress reporting is useless
+			if (!Args.ConsoleVerbose && !Console.IsOutputRedirected)
 				CurrentReporter = new ProgressReporter(max);
 			Console.WriteLine();
 		}
@@ -173,11 +176,11 @@ namespace yui
 			if (Args.TitleFilter != null)
 				metaEntries = metaEntries.Where(x => Args.TitleFilter.Contains(x.ID)).ToArray();
 
-			BeginProgressReport("Downloading {} meta title(s)... ", metaEntries.Length);
+			BeginProgressReport("Downloading {0} meta title(s)... ", metaEntries.Length);
 			var contentEntries = yui.ProcessMeta(metaEntries);
 			CompleteProgressReport();
 
-			BeginProgressReport("Downloading {} content(s)... ", contentEntries.Length);
+			BeginProgressReport("Downloading {0} content(s)... ", contentEntries.Length);
 			yui.ProcessContent(contentEntries);
 			CompleteProgressReport();
 
