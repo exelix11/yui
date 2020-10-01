@@ -130,7 +130,7 @@ namespace yui
 						TitleID = $"0{meta_entry.TitleId:X}",
 						Version = meta_entry.Version.Version.ToString()
 					};
-					Trace.WriteLine($"[GetContentEntries] From {cnmt.TitleId} => {i}");
+					Trace.WriteLine($"[GetContentEntries] From {cnmt.TitleId:x} => {i}");
 					res.Add(i);
 				}
 
@@ -141,7 +141,7 @@ namespace yui
 						IsMeta = false,
 						NcaID = content_entry.NcaId.ToHexString().ToLower(),
 					};
-					Trace.WriteLine($"[GetContentEntries] From {cnmt.TitleId} => {i}");
+					Trace.WriteLine($"[GetContentEntries] From {cnmt.TitleId:x} => {i}");
 					res.Add(i);
 				}
 			}
