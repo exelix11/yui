@@ -3,13 +3,21 @@
     class Program
     {
         static void Main(string[] args)
-        {    
-            using (var ctx = new SysUpdateHandler(args))
+        {
+            var Parsed = new HandlerArgs(args);
+            
+            if (Parsed.OperationMode is null || Parsed.OperationMode == HandlerArgs.Mode.Help)
             {
-                if (ctx.Args.get_info)
+                HandlerArgs.PrintHelp();
+                return;
+            }
+
+            using (var ctx = new SysUpdateHandler(Parsed))
+            {
+                if (Parsed.OperationMode == HandlerArgs.Mode.GetInfo)
                     ctx.PrintLatestSysVersion();
             
-                if (ctx.Args.get_latest)
+                if (Parsed.OperationMode == HandlerArgs.Mode.GetLatest)
                     ctx.GetLatest();
             }
         }
