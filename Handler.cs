@@ -56,7 +56,7 @@ namespace yui
 		{
 			UpdateTimer.Change(Timeout.Infinite, Timeout.Infinite);
 			Complete = true;
-			UpdateVal("Done." + new string(' ', MaxWrittenLen - 5));
+			UpdateVal("Done." + new string(' ', Math.Min(MaxWrittenLen - 5, 1)));
 		}
 
 		public void Dispose()
