@@ -62,31 +62,31 @@ namespace yui
 		readonly Yui yui;
 		string OutPath;
 
-		public SysUpdateHandler(string[] cmdArgs)
+		public SysUpdateHandler(HandlerArgs args)
 		{
-			Args = new HandlerArgs(cmdArgs);
+			Args = args;
 
-			if (Args.console_verbose)
+			if (Args.ConsoleVerbose)
 				Trace.Listeners.Add(new TextWriterTraceListener(Console.Out));
 
-			if (Args.file_verbose != null)
-				Trace.Listeners.Add(new TextWriterTraceListener(File.OpenWrite(Args.file_verbose)));
+			if (Args.FileVerbose != null)
+				Trace.Listeners.Add(new TextWriterTraceListener(File.OpenWrite(Args.FileVerbose)));
 
 			yui = new Yui(new YuiConfig(
 				ContentHandler: StoreContent,
 				MetaHandler: StoreMeta,
-				MaxParallelism: Args.max_jobs,
-				Keyset: Args.keyset,
+				MaxParallelism: Args.MaxJobs,
+				Keyset: Args.Keyset,
 				Client: new CdnClientConfig {
-					DeviceID = Args.device_id,
-					Env = Args.env,
-					FirmwareVersion = Args.firmware_version,
-					Platform = Args.platform,
-					Tencent = Args.tencent
-				}.WithCertFromFile(Args.cert_loc).MakeClient()
+					DeviceID = Args.DeviceID,
+					Env = Args.Env,
+					FirmwareVersion = Args.FirmwareVersion,
+					Platform = Args.Platform,
+					Tencent = Args.Tencent
+				}.WithCertFromFile(Args.CertPath).MakeClient()
 			));
 
-			OutPath = Args.out_path ?? "";
+			OutPath = Args.OutPath ?? "";
 		}
 
 		ProgressReporter? CurrentReporter;
@@ -120,9 +120,9 @@ namespace yui
 		{
 			if (Directory.Exists(path))
 			{
-				if (!Args.ignore_warnings)
+				if (!Args.IgnoreWarnings)
 					Console.Write($"[WARNING] '{path}' already exists. \nPlease confirm that it should be overwritten [type 'y' to accept, anything else to abort]: ");
-				if (Args.ignore_warnings || Console.ReadKey().KeyChar == 'y')
+				if (Args.IgnoreWarnings || Console.ReadKey().KeyChar == 'y')
 				{
 					Console.WriteLine();
 					Directory.Delete(path, true);
@@ -139,7 +139,7 @@ namespace yui
 		private void BeginProgressReport(string message, int max)
 		{
 			Console.Write(message, max);
-			if (!Args.console_verbose) // With verbose args progress reporting is useless
+			if (!Args.ConsoleVerbose) // With verbose args progress reporting is useless
 				CurrentReporter = new ProgressReporter(max);
 			Console.WriteLine();
 		}
@@ -170,8 +170,8 @@ namespace yui
 			Console.WriteLine("Parsing update entries...");
 			var metaEntries = yui.GetContentEntries(new MemoryStorage(update.Data));
 
-			if (Args.title_filter != null)
-				metaEntries = metaEntries.Where(x => Args.title_filter.Contains(x.ID)).ToArray();
+			if (Args.TitleFilter != null)
+				metaEntries = metaEntries.Where(x => Args.TitleFilter.Contains(x.ID)).ToArray();
 
 			BeginProgressReport("Downloading {} meta title(s)... ", metaEntries.Length);
 			var contentEntries = yui.ProcessMeta(metaEntries);
