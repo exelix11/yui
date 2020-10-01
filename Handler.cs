@@ -2,17 +2,64 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using LibHac.Fs;
 
 namespace yui
 {
+	class ProgressReporter
+	{
+		readonly int Max;
+		readonly (int, int) Cursor;
+
+		int Cur = 0;
+		bool Complete = false;
+		int MaxWrittenLen = 0;
+
+		public ProgressReporter(int max)
+		{
+			Max = max;
+			Cursor = (Console.CursorLeft, Console.CursorTop);
+		}
+
+		private void UpdateVal(string s)
+		{
+			var pos = (Console.CursorLeft, Console.CursorTop);
+			(Console.CursorLeft, Console.CursorTop) = Cursor;
+			Console.Write(s);
+			(Console.CursorLeft, Console.CursorTop) = pos;
+			MaxWrittenLen = Math.Max(s.Length, MaxWrittenLen);
+		}
+
+		public void Increment()
+		{
+			if (Complete)
+				throw new Exception("Can't increment a completed process");
+
+			Interlocked.Increment(ref Cur);
+			// Don't need to update the terminal output every time
+			if (Monitor.TryEnter(this))
+				// Don't waste time updating the screen in the download thread
+				Task.Run(() =>
+				{
+					UpdateVal($"{Cur} / {Max}");
+					Monitor.Exit(this);
+				});
+		}
+
+		// Should be called once all threaded operations are finished
+		public void MarkComplete()
+		{
+			Complete = true;
+			UpdateVal("Done." + new string(' ', MaxWrittenLen - 5));
+		}
+	}
+
 	class SysUpdateHandler : IDisposable
 	{
 		public readonly HandlerArgs Args;
-		readonly Yui yui;		
-		
-		bool IgnoreWarnings => Args.ignore_warnings;
-
+		readonly Yui yui;
 		string OutPath;
 
 		public SysUpdateHandler(string[] cmdArgs)
@@ -23,11 +70,11 @@ namespace yui
 				Trace.Listeners.Add(new TextWriterTraceListener(Console.Out));
 
 			yui = new Yui(new YuiConfig(
-				ContentHandler : StoreContent,
-				MetaHandler : StoreMeta,
-				MaxParallelism : Args.max_jobs,
-				Keyset : Args.keyset,
-				Client : new CdnClientConfig {
+				ContentHandler: StoreContent,
+				MetaHandler: StoreMeta,
+				MaxParallelism: Args.max_jobs,
+				Keyset: Args.keyset,
+				Client: new CdnClientConfig {
 					DeviceID = Args.device_id,
 					Env = Args.env,
 					FirmwareVersion = Args.firmware_version,
@@ -39,6 +86,8 @@ namespace yui
 			OutPath = Args.out_path ?? "";
 		}
 
+		ProgressReporter? CurrentReporter;
+
 		// Url is only for debugging purposes
 		void StoreContent(Stream data, string ncaID, string? url)
 		{
@@ -47,6 +96,8 @@ namespace yui
 			Trace.WriteLine($"[GotContent] [{data.Length}] {url ?? ""} => {path}");
 			using FileStream fs = File.OpenWrite(path);
 			data.CopyTo(fs);
+
+			CurrentReporter?.Increment();
 		}
 
 		void StoreMeta(byte[] data, string titleID, string ncaID, string version, string? url)
@@ -55,6 +106,8 @@ namespace yui
 
 			Trace.WriteLine($"[GotMeta] {titleID} v{version} [{data.Length}] {url ?? ""} => {path}");
 			File.WriteAllBytes(path, data);
+
+			CurrentReporter?.Increment();
 		}
 
 		static string FileName(string root, string ncaID, bool isMeta) =>
@@ -64,9 +117,9 @@ namespace yui
 		{
 			if (Directory.Exists(path))
 			{
-				if (!IgnoreWarnings)
+				if (!Args.ignore_warnings)
 					Console.Write($"[WARNING] '{path}' already exists. \nPlease confirm that it should be overwritten [type 'y' to accept, anything else to abort]: ");
-				if (IgnoreWarnings || Console.ReadKey().KeyChar == 'y')
+				if (Args.ignore_warnings || Console.ReadKey().KeyChar == 'y')
 				{
 					Console.WriteLine();
 					Directory.Delete(path, true);
@@ -78,6 +131,25 @@ namespace yui
 				}
 			}
 			Directory.CreateDirectory(path);
+		}
+
+		private void BeginProgressReport(string message, int max)
+		{
+			Console.Write(message, max);
+			if (!Args.verbose) // With verbose args progress reporting is useless
+				CurrentReporter = new ProgressReporter(max);
+			Console.WriteLine();
+		}
+
+		private void CompleteProgressReport() 
+		{
+			CurrentReporter?.MarkComplete();
+			StopProgressReport();
+		}
+
+		private void StopProgressReport() 
+		{
+			CurrentReporter = null;
 		}
 
 		public void GetLatest()
@@ -98,11 +170,13 @@ namespace yui
 			if (Args.title_filter != null)
 				metaEntries = metaEntries.Where(x => Args.title_filter.Contains(x.ID)).ToArray();
 
-			Console.WriteLine($"Downloading {metaEntries.Length} meta titles...");
+			BeginProgressReport("Downloading {} meta title(s)... ", metaEntries.Length);
 			var contentEntries = yui.ProcessMeta(metaEntries);
+			CompleteProgressReport();
 
-			Console.WriteLine($"Downloading {contentEntries.Length} contents...");
+			BeginProgressReport("Downloading {} content(s)... ", contentEntries.Length);
 			yui.ProcessContent(contentEntries);
+			CompleteProgressReport();
 
 			Console.WriteLine($"All done !");
 		}
@@ -119,6 +193,7 @@ namespace yui
 
 		public void Dispose()
 		{
+			StopProgressReport();
 			yui.Dispose();
 		}
 	}

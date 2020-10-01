@@ -25,9 +25,9 @@ namespace yui
 			this.ContentHandler = ContentHandler;
 		}
 
-		public CdnClient Client;
-		public Keyset? Keyset;
-		public int MaxParallelism;
+		readonly public CdnClient Client;
+		readonly public Keyset? Keyset;
+		readonly public int MaxParallelism;
 
 		// Url is passed only for debugging and can be null
 		public delegate void ContentHandlerMethod(Stream data, string ncaID, string? url);
@@ -90,16 +90,22 @@ namespace yui
 
 		public struct CnmtInfo
 		{
+			public bool IsMeta;
+
 			public string ID => IsMeta ?
 				TitleID ?? throw new ArgumentNullException(nameof(TitleID)) :
 				NcaID ?? throw new ArgumentNullException(nameof(NcaID));
 
-			public string MetaVersion => !IsMeta ?
-				throw new Exception("This field is only for meta NCAs") :
-				Version ?? throw new ArgumentNullException(Version);
+			public string MetaVersion => IsMeta ?
+				Version ?? throw new ArgumentNullException(Version) :
+				throw new Exception("This field is only for meta NCAs");
 
-			public string? TitleID, Version, NcaID;
-			public bool IsMeta;
+			public override string ToString() => IsMeta ?
+				$"{{[Meta] ID: {ID} Version: {MetaVersion}}}" :
+				$"{{[Content] ID: {NcaID}}}";
+
+			public string? TitleID, Version; // Only if meta
+			public string? NcaID; // Only if content
 		}
 
 		public CnmtInfo[] GetContentEntries(IStorage NcaStorage)
@@ -117,19 +123,27 @@ namespace yui
 				Cnmt cnmt = new Cnmt(fp.AsStream());
 
 				foreach (var meta_entry in cnmt.MetaEntries)
-					res.Add(new CnmtInfo
+				{
+					var i = new CnmtInfo 
 					{
 						IsMeta = true,
 						TitleID = $"0{meta_entry.TitleId:X}",
 						Version = meta_entry.Version.Version.ToString()
-					});
+					};
+					Trace.WriteLine($"[GetContentEntries] From {cnmt.TitleId} => {i}");
+					res.Add(i);
+				}
 
 				foreach (var content_entry in cnmt.ContentEntries)
-					res.Add(new CnmtInfo
+				{
+					var i = new CnmtInfo
 					{
 						IsMeta = false,
 						NcaID = content_entry.NcaId.ToHexString().ToLower(),
-					});
+					};
+					Trace.WriteLine($"[GetContentEntries] From {cnmt.TitleId} => {i}");
+					res.Add(i);
+				}
 			}
 
 			return res.ToArray();
@@ -167,13 +181,6 @@ namespace yui
 			return res.ToArray();
 		}
 
-		private void DownloadContent(string ncaID)
-		{
-			var response = Client.GetContent(ncaID);
-			// This is checked in ProcessContent
-			Config.ContentHandler!(response.ContentAsStream(), ncaID, response.RequestMessage.RequestUri.ToString());
-		}
-
 		public void ProcessContent(CnmtInfo[] info)
 		{
 			if (info.Any(x => x.IsMeta))
@@ -185,7 +192,8 @@ namespace yui
 
 			Parallel.ForEach(info, new ParallelOptions { MaxDegreeOfParallelism = Config.MaxParallelism }, x =>
 			{
-				DownloadContent(x.ID);
+				var response = Client.GetContent(x.ID);
+				Config.ContentHandler(response.ContentAsStream(), x.ID, response.RequestMessage.RequestUri.ToString());
 			});
 		}
 
