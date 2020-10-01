@@ -8,10 +8,11 @@ using LibHac.Fs;
 
 namespace yui
 {
-	class ProgressReporter
+	class ProgressReporter : IDisposable
 	{
 		readonly int Max;
 		readonly (int, int) Cursor;
+		readonly Timer UpdateTimer;
 
 		int Cur = 0;
 		bool Complete = false;
@@ -24,6 +25,13 @@ namespace yui
 
 			Max = max;
 			Cursor = (Console.CursorLeft, Console.CursorTop);
+			UpdateTimer = new Timer(TimerCallback, null, 1000, 1000);
+		}
+
+		private void TimerCallback(object? _) 
+		{
+			if (!Complete)
+				UpdateVal($"{Cur}/{Max}");
 		}
 
 		private void UpdateVal(string s)
@@ -41,19 +49,19 @@ namespace yui
 				throw new Exception("Can't increment a completed process");
 
 			Interlocked.Increment(ref Cur);
-			// Don't need to update the terminal output every time
-			if (Monitor.TryEnter(this))
-			{
-				UpdateVal($"{Cur} / {Max}");
-				Monitor.Exit(this);
-			};
 		}
 
 		// Should be called once all threaded operations are finished
 		public void MarkComplete()
 		{
+			UpdateTimer.Change(Timeout.Infinite, Timeout.Infinite);
 			Complete = true;
 			UpdateVal("Done." + new string(' ', MaxWrittenLen - 5));
+		}
+
+		public void Dispose()
+		{
+			UpdateTimer.Dispose();
 		}
 	}
 
@@ -155,6 +163,7 @@ namespace yui
 
 		private void StopProgressReport() 
 		{
+			CurrentReporter?.Dispose();
 			CurrentReporter = null;
 		}
 
