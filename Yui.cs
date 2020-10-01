@@ -16,9 +16,18 @@ namespace yui
 {
 	public class YuiConfig
 	{
-		public CdnClient Client = null!;
-		public Keyset? Keyset = null;
-		public int MaxParallelism = 5;
+		public YuiConfig(CdnClient Client, Keyset? Keyset = null, int MaxParallelism = 5, MetaHandlerMethod? MetaHandler = null, ContentHandlerMethod? ContentHandler = null)
+		{
+			this.Client = Client;
+			this.Keyset = Keyset;
+			this.MaxParallelism = MaxParallelism;
+			this.MetaHandler = MetaHandler;
+			this.ContentHandler = ContentHandler;
+		}
+
+		public CdnClient Client;
+		public Keyset? Keyset;
+		public int MaxParallelism;
 
 		// Url is passed only for debugging and can be null
 		public delegate void ContentHandlerMethod(Stream data, string ncaID, string? url);
@@ -143,7 +152,8 @@ namespace yui
 
 			ConcurrentBag<CnmtInfo> res = new ConcurrentBag<CnmtInfo>();
 
-			Parallel.ForEach(info, new ParallelOptions { MaxDegreeOfParallelism = Config.MaxParallelism }, x => {
+			Parallel.ForEach(info, new ParallelOptions { MaxDegreeOfParallelism = Config.MaxParallelism }, x =>
+			{
 				var nca = DownloadMeta(x.ID, x.MetaVersion);
 
 				var info = GetContentEntries(new MemoryStorage(nca));
@@ -173,7 +183,8 @@ namespace yui
 			if (Config.ContentHandler is null)
 				return;
 
-			Parallel.ForEach(info, new ParallelOptions { MaxDegreeOfParallelism = Config.MaxParallelism }, x => {
+			Parallel.ForEach(info, new ParallelOptions { MaxDegreeOfParallelism = Config.MaxParallelism }, x =>
+			{
 				DownloadContent(x.ID);
 			});
 		}

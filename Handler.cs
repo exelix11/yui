@@ -22,19 +22,19 @@ namespace yui
 			if (Args.verbose)
 				Trace.Listeners.Add(new TextWriterTraceListener(Console.Out));
 
-			yui = new Yui(new YuiConfig {
-				ContentHandler = StoreContent,
-				MetaHandler = StoreMeta,
-				MaxParallelism = Args.max_jobs,
-				Keyset = Args.keyset,
-				Client = new CdnClientConfig {
+			yui = new Yui(new YuiConfig(
+				ContentHandler : StoreContent,
+				MetaHandler : StoreMeta,
+				MaxParallelism : Args.max_jobs,
+				Keyset : Args.keyset,
+				Client : new CdnClientConfig {
 					DeviceID = Args.device_id,
 					Env = Args.env,
 					FirmwareVersion = Args.firmware_version,
 					Platform = Args.platform,
 					Tencent = Args.tencent
 				}.WithCertFromFile(Args.cert_loc).MakeClient()
-			});
+			));
 
 			OutPath = Args.out_path ?? "";
 		}
