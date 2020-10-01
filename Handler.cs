@@ -66,8 +66,11 @@ namespace yui
 		{
 			Args = new HandlerArgs(cmdArgs);
 
-			if (Args.verbose)
+			if (Args.console_verbose)
 				Trace.Listeners.Add(new TextWriterTraceListener(Console.Out));
+
+			if (Args.file_verbose != null)
+				Trace.Listeners.Add(new TextWriterTraceListener(File.OpenWrite(Args.file_verbose)));
 
 			yui = new Yui(new YuiConfig(
 				ContentHandler: StoreContent,
@@ -136,7 +139,7 @@ namespace yui
 		private void BeginProgressReport(string message, int max)
 		{
 			Console.Write(message, max);
-			if (!Args.verbose) // With verbose args progress reporting is useless
+			if (!Args.console_verbose) // With verbose args progress reporting is useless
 				CurrentReporter = new ProgressReporter(max);
 			Console.WriteLine();
 		}

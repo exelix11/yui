@@ -26,7 +26,8 @@ namespace yui
         public string firmware_version = "5.1.0-3";
         public int max_jobs = 5;
         public string[]? title_filter;
-        public bool verbose = false;
+        public bool console_verbose = false;
+        public string? file_verbose = null;
 
         public HandlerArgs(string[] raw_args)
         {
@@ -110,7 +111,10 @@ namespace yui
                     this.title_filter = raw_args[++i].Split(',');
                     break;
                 case "-v":
-                    this.verbose = true;
+                    this.console_verbose = true;
+                    break;
+                case "-vf":
+                    this.file_verbose = raw_args[++i];
                     break;
                 }
             }
@@ -137,6 +141,7 @@ namespace yui
                 + "--jobs|-j    max jobs                            Max concurrent downloads, default is 5\n"
                 + "--titles     010000001000,0100000010001...       Only download specified titles, takes a comma separated list of title IDs\n"
                 + "-v                                               Verbose mode\n"
+                + "-vf          path/to/log.txt                     Verbose log to file\n"
             );
         }
 
