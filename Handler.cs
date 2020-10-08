@@ -1,176 +1,222 @@
 using System;
+using System.Diagnostics;
 using System.IO;
-
-using LibHac;
-using LibHac.Common;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using LibHac.Fs;
-using LibHac.FsSystem;
-using LibHac.FsSystem.NcaUtils;
 
 namespace yui
 {
-    class SysUpdateHandler: System.IDisposable
-    {
-        private string CDN_URL;
-        private string SUN_URL;
-        private Session session;
-        private string CDN_TEMPLATE = "{0}/{1}/{2}/{3}/{4}?device_id={4}";
-        public HandlerArgs args;
-        public SysUpdateHandler(string[] args)
-        {
-            this.args = new HandlerArgs(args);
-            this.session = new Session(ref this.args);
+	class ProgressReporter : IDisposable
+	{
+		readonly int Max;
+		readonly (int, int) Cursor;
+		readonly Timer UpdateTimer;
 
-            if (this.args.tencent) {
-                this.CDN_URL = "https://atumn.hac.lp1.d4c.n.nintendoswitch.cn";
-                this.SUN_URL = "https://sun.hac.lp1.d4c.n.nintendoswitch.cn/v1";
-            }
-            else {
-                this.CDN_URL = "https://atumn.hac.lp1.d4c.nintendo.net";
-                this.SUN_URL = "https://sun.hac.lp1.d4c.nintendo.net/v1";
-            
-            }
-        }
-        public void Dispose() {}
+		int Cur = 0;
+		bool Complete = false;
+		int MaxWrittenLen = 0;
 
-        public dynamic GetLatestUpdateInfo()
-        {
-            string url = $"{this.SUN_URL}/system_update_meta?device_id={this.args.device_id}";
-            return this.session.GetJson(url);
-        }
-        public static Tuple<string, int, long> PrettyPrintVersion(long v)
-        {
-            string str_ver = $"{(v >> 26) & 0x1f}.{(v >> 20) & 0x1f}.{(v >> 16) & 0xf}";
-            int bn = (int)v & 0xffff;
+		public ProgressReporter(int max)
+		{
+			if (Console.IsOutputRedirected)
+				throw new Exception("Can't reposition the console cursor when output is redirected");
 
-            return Tuple.Create(str_ver, bn, v);
-        }
+			Max = max;
+			Cursor = (Console.CursorLeft, Console.CursorTop);
+			UpdateTimer = new Timer(TimerCallback, null, 1000, 1000);
+		}
 
-        private void SafeHandleDirectory(string path)
-        {
-            if (Directory.Exists(path))
-            {
-                if (!this.args.ignore_warnings)
-                    Console.WriteLine($"[WARNING] '{path}' already exists. \nPlease confirm that it should be overwritten [type 'y' to accept, anything else to abort]:");
-                if (this.args.ignore_warnings || Console.ReadKey().KeyChar == 'y')
-                {
-                    Directory.Delete(path, true);
-                }
-                else
-                {
-                    Console.WriteLine("Aborting...");
-                    Environment.Exit(-2);
-                }
-            }
-            Directory.CreateDirectory(path);
+		private void TimerCallback(object? _) 
+		{
+			if (!Complete)
+				UpdateVal($"{Cur}/{Max}");
+		}
 
-        }
+		private void UpdateVal(string s)
+		{
+			var pos = (Console.CursorLeft, Console.CursorTop);
+			(Console.CursorLeft, Console.CursorTop) = Cursor;
+			Console.Write(s);
+			(Console.CursorLeft, Console.CursorTop) = pos;
+			MaxWrittenLen = Math.Max(s.Length, MaxWrittenLen);
+		}
 
-        public void GetLatestFull(string out_path)
-        {
-            var update_meta = GetLatestUpdateInfo()["system_update_metas"][0];
-            var ver_tuple = PrettyPrintVersion(Convert.ToInt64(update_meta["title_version"]));
+		public void Increment()
+		{
+			if (Complete)
+				throw new Exception("Can't increment a completed process");
 
-            if (String.IsNullOrEmpty(out_path))
-                out_path = $"sysupdate-[{ver_tuple.Item3}]-{ver_tuple.Item1}-bn_{ver_tuple.Item2}";
-            SafeHandleDirectory(out_path);
+			Interlocked.Increment(ref Cur);
+		}
 
-            // get the update meta title whose cnmt contains the contentids 
-            // of all the other meta ncas
-            string update_meta_path = this.session.GetStreamNcaToFile(
-                out_path,
-                String.Format(
-                    this.CDN_TEMPLATE,
-                    this.CDN_URL,
-                    "t", // magic
-                    "s", // *sparkles*
-                    update_meta["title_id"],
-                    update_meta["title_version"],
-                    this.args.device_id
-                ),
-                true // is_meta
-            );
+		// Should be called once all threaded operations are finished
+		public void MarkComplete()
+		{
+			UpdateTimer.Change(Timeout.Infinite, Timeout.Infinite);
+			Complete = true;
+			UpdateVal("Done." + new string(' ', Math.Min(MaxWrittenLen - 5, 1)));
+		}
 
-            this.DownloadEachNcaInNcasCnmtRecursive(out_path, update_meta_path);
+		public void Dispose()
+		{
+			UpdateTimer.Dispose();
+		}
+	}
 
-        }
-        public void DownloadEachNcaInNcasCnmtRecursive(string out_folder, string nca_path)
-        {
-            using (IStorage i_fp = new LocalStorage(nca_path, FileAccess.Read))
-            {
-                var nca = new Nca(this.args.keyset, i_fp);
-                using (IFileSystem fs = nca.OpenFileSystem(NcaSectionType.Data, IntegrityCheckLevel.ErrorOnInvalid))
-                {
-                    foreach (var entry in fs.EnumerateEntries("/", "*.cnmt"))
-                    {
-                        fs.OpenFile(out IFile fp, new U8Span(entry.Name), OpenMode.Read);
-                        Cnmt cnmt = new Cnmt(fp.AsStream());
+	class SysUpdateHandler : IDisposable
+	{
+		public readonly HandlerArgs Args;
+		readonly Yui yui;
+		string OutPath;
 
-                        foreach (var meta_entry in cnmt.MetaEntries)
-                        {
-                            string title_id = TidString(meta_entry.TitleId);
-                            string version = meta_entry.Version.Version.ToString();
-                        
-                            string meta_nca_path = this.session.GetStreamNcaToFile(
-                                out_folder,
-                                String.Format(
-                                    "{0}/c/{1}/{2}?device_id={3}",
-                                    this.CDN_URL,
-                                    (title_id == "0100000000000816") ? "c" : "a",
-                                    this.GetContentId(title_id, version),
-                                    this.args.device_id
-                                ),
-                                true
-                            );
-                            this.DownloadEachNcaInNcasCnmtRecursive(out_folder, meta_nca_path);
-                        }
+		public SysUpdateHandler(HandlerArgs args)
+		{
+			Args = args;
 
-                        foreach (var content_entry in cnmt.ContentEntries)
-                        {
-                            string content_id = content_entry.NcaId.ToHexString().ToLower();
-                            this.session.GetStreamNcaToFile(
-                                out_folder,
-                                String.Format(
-                                    "{0}/c/c/{1}",
-                                    this.CDN_URL,
-                                    content_id
-                                ),
-                                false,
-                                content_id
-                            );
-                        }
-                    }
-                }
-            }
-        }
-        public string GetContentId(string title_id, string title_version)
-        {
-            return this.session.Head(
-                String.Format(
-                    this.CDN_TEMPLATE,
-                    this.CDN_URL,
-                    "t",
-                    (title_id == "0100000000000816") ? "s" : "a",
-                    title_id,
-                    title_version,
-                    this.args.device_id
-                )
-            )["X-Nintendo-Content-ID"];
-        } 
-        static string TidString(ulong tid)
-        {
-            return $"0{tid:X}";
-        }
+			if (Args.ConsoleVerbose)
+				Trace.Listeners.Add(new TextWriterTraceListener(Console.Out));
 
-        public void PrintLatestSysVersion()
-        {
-            var update_meta = GetLatestUpdateInfo()["system_update_metas"][0];
-            var ver_tuple = PrettyPrintVersion(Convert.ToInt64(update_meta["title_version"]));
+			if (Args.FileVerbose != null)
+				Trace.Listeners.Add(new TextWriterTraceListener(File.OpenWrite(Args.FileVerbose)));
 
-            Console.WriteLine(
-                $"Latest version on CDN: {ver_tuple.Item1} [{ver_tuple.Item3}] buildnum={ver_tuple.Item2}"
-            );
-        }
-    }
+			yui = new Yui(new YuiConfig(
+				ContentHandler: StoreContent,
+				MetaHandler: StoreMeta,
+				MaxParallelism: Args.MaxJobs,
+				Keyset: Args.Keyset,
+				Client: new CdnClientConfig {
+					DeviceID = Args.DeviceID,
+					Env = Args.Env,
+					FirmwareVersion = Args.FirmwareVersion,
+					Platform = Args.Platform,
+					Tencent = Args.Tencent
+				}.WithCertFromFile(Args.CertPath).MakeClient()
+			));
+
+			OutPath = Args.OutPath ?? "";
+		}
+
+		ProgressReporter? CurrentReporter;
+
+		// Url is only for debugging purposes
+		void StoreContent(Stream data, string ncaID, string? url)
+		{
+			string path = FileName(OutPath, ncaID, false);
+
+			Trace.WriteLine($"[GotContent] [{data.Length}] {url ?? ""} => {path}");
+			using FileStream fs = File.OpenWrite(path);
+			data.CopyTo(fs, 16 * 1024 * 1024);
+			data.Dispose();
+
+			CurrentReporter?.Increment();
+		}
+
+		void StoreMeta(byte[] data, string titleID, string ncaID, string version, string? url)
+		{
+			string path = FileName(OutPath, ncaID, true);
+
+			Trace.WriteLine($"[GotMeta] {titleID} v{version} [{data.Length}] {url ?? ""} => {path}");
+			File.WriteAllBytes(path, data);
+
+			CurrentReporter?.Increment();
+		}
+
+		static string FileName(string root, string ncaID, bool isMeta) =>
+			Path.Combine(root, $"{ncaID}{(isMeta ? ".cnmt" : "")}.nca");
+
+		private void SafeHandleDirectory(string path)
+		{
+			if (Directory.Exists(path))
+			{
+				if (!Args.IgnoreWarnings)
+					Console.Write($"[WARNING] '{path}' already exists. \nPlease confirm that it should be overwritten [type 'y' to accept, anything else to abort]: ");
+				if (Args.IgnoreWarnings || Console.ReadKey().KeyChar == 'y')
+				{
+					Console.WriteLine();
+					Directory.Delete(path, true);
+				}
+				else
+				{
+					Console.WriteLine("Aborting...");
+					Environment.Exit(-2);
+				}
+			}
+			Directory.CreateDirectory(path);
+		}
+
+		private void BeginProgressReport(string message, int max)
+		{
+			Console.Write(message, max);
+			// With verbose args progress reporting is useless
+			if (!Args.ConsoleVerbose && !Console.IsOutputRedirected)
+				CurrentReporter = new ProgressReporter(max);
+			Console.WriteLine();
+		}
+
+		private void CompleteProgressReport() 
+		{
+			CurrentReporter?.MarkComplete();
+			StopProgressReport();
+		}
+
+		private void StopProgressReport() 
+		{
+			CurrentReporter?.Dispose();
+			CurrentReporter = null;
+		}
+
+		public void GetLatest()
+		{
+			Console.WriteLine("Getting sysupdate meta...");
+			var update = yui.GetSysUpdateMetaNca();
+
+			if (String.IsNullOrEmpty(OutPath))
+				OutPath = $"sysupdate-[{update.Version.Value}]-{update.Version}-bn_{update.Version.BuildNumber}";
+			SafeHandleDirectory(OutPath);
+
+			// store it to disk as we're downloading the full update
+			StoreMeta(update.Data, update.TitleID, update.NcaID, update.Version.Value.ToString(), null);
+
+			Console.WriteLine("Parsing update entries...");
+			var metaEntries = yui.GetContentEntries(new MemoryStorage(update.Data));
+
+			if (Args.TitleFilter != null)
+				metaEntries = metaEntries.Where(x => Args.TitleFilter.Contains(x.ID)).ToArray();
+
+			BeginProgressReport("Downloading {0} meta title(s)... ", metaEntries.Length);
+			var contentEntries = yui.ProcessMeta(metaEntries);
+			CompleteProgressReport();
+
+			if (Args.OnlyMeta)
+			{
+				Console.WriteLine("Downloading content has been skipped as requested.");
+			}
+			else
+			{
+				BeginProgressReport("Downloading {0} content(s)... ", contentEntries.Length);
+				yui.ProcessContent(contentEntries);
+				CompleteProgressReport();
+			}
+
+			Console.WriteLine($"All done !");
+		}
+
+		public void PrintLatestSysVersion()
+		{
+			var update_meta = yui.GetLatestUpdateInfo();
+			var ver = Yui.ParseVersion(update_meta.system_update_metas[0].title_version);
+
+			Console.WriteLine(
+				$"Latest version on CDN: {ver} [{ver.Value}] buildnum={ver.BuildNumber}"
+			);
+		}
+
+		public void Dispose()
+		{
+			StopProgressReport();
+			yui.Dispose();
+		}
+	}
 }
-

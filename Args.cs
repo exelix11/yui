@@ -1,6 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
-
+using System.Linq;
 using LibHac;
 
 namespace yui
@@ -8,101 +9,108 @@ namespace yui
     class HandlerArgs
     {
         // Modes of operation
-        public bool get_info = false;
-        public bool get_latest = false;
-        public bool get_help = false;
+        public enum Mode { GetInfo, Help, GetLatest };
+        public Mode? OperationMode      { get; private set; } = null;
 
         // Context relevant information
-        public bool tencent = false;
-        public bool ignore_warnings = false;
-        public string cert_loc = "nx_tls_client_cert.pem";
-        public string keyset_loc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".switch/prod.keys");
-        public Keyset keyset = null;
-        public string out_path = null;
-        public string device_id = "DEADCAFEBABEBEEF";
-        public string env = "lp1";
-        public string server = "d4c";
-        public string platform = "NX";
-        public string firmware_version = "5.1.0-3";
+        public bool Tencent             { get; private set; } = false;
+        public bool IgnoreWarnings      { get; private set; } = false;
+        public string CertPath          { get; private set; } = "nx_tls_client_cert.pem";
+        public string KeysetPath        { get; private set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".switch/prod.keys");
+        public Keyset? Keyset           { get; private set; } = null;
+        public string? OutPath          { get; private set; } = null;
+        public string DeviceID          { get; private set; } = "DEADCAFEBABEBEEF";
+        public string Env               { get; private set; } = "lp1";
+        public string Server            { get; private set; } = "d4c";
+        public string Platform          { get; private set; } = "NX";
+        public string FirmwareVersion   { get; private set; } = "5.1.0-3";
+        public int MaxJobs              { get; private set; } = 5;
+        public string[]? TitleFilter    { get; private set; } = null;
+        public bool ConsoleVerbose      { get; private set; } = false;
+        public string? FileVerbose      { get; private set; } = null;
+        public bool OnlyMeta            { get; private set; } = false;
+
+        class Handler
+        {
+            public string[] Aliases;
+
+            public bool RequiresArg => FnArg != null;
+
+            private Action<string>? FnArg;
+            private Action? Fn;
+
+            public Handler(string[] Aliases, Action<string> Fn)
+            {
+                this.Aliases = Aliases;
+                this.FnArg = Fn;
+            }
+
+            public Handler(string[] Aliases, Action Fn)
+            {
+                this.Aliases = Aliases;
+                this.Fn = Fn;
+            }
+
+            public void Invoke(string arg) 
+            {
+                if (FnArg != null)
+                    FnArg(arg);
+                else
+                    Fn!();
+            }
+        }
+
         public HandlerArgs(string[] raw_args)
         {
-            ParseArgs(raw_args);
-            if (this.get_help || !(this.get_latest || this.get_info))
-            {
-                PrintHelp();
-                Environment.Exit(-1);
-            }
-            InitStuff();
-        }
+            Handler[] Handlers = new []{
+            // Operation modes
+                new Handler ( Aliases: new[] { "--get-info", "--info", "-i" },     Fn: () => OperationMode = Mode.GetInfo ),
+                new Handler ( Aliases: new[] { "--get-latest", "--latest", "-l" }, Fn: () => OperationMode = Mode.GetLatest ),
+                new Handler ( Aliases: new[] { "--help", "-h" },                   Fn: () => OperationMode = Mode.Help ),
+            // Args         
+                new Handler (Aliases: new[] { "--cert", "-c" },                  Fn: x => CertPath = x ),
+                new Handler (Aliases: new[] { "--keyset", "-k" },                Fn: x => KeysetPath = x ),
+                new Handler (Aliases: new[] { "--out-path", "--out", "-o" },     Fn: x => OutPath = x ),
+                new Handler (Aliases: new[] { "--device-id", "-did" },           Fn: x => DeviceID = x ),
+                new Handler (Aliases: new[] { "--environment", "-env" },         Fn: x => Env = x ),
+                new Handler (Aliases: new[] { "--server", "-s" },                Fn: x => Server = x ),
+                new Handler (Aliases: new[] { "--platform", "-p" },              Fn: x => Platform = x ),
+                new Handler (Aliases: new[] { "--firmware-version", "-fwver" },  Fn: x => FirmwareVersion = x ),
+                new Handler (Aliases: new[] { "--jobs", "-j" },                  Fn: x => MaxJobs = Math.Min(int.Parse(x), 1) ),
+                new Handler (Aliases: new[] { "--titles" },                      Fn: x => TitleFilter = x.Split(',') ),
+                new Handler (Aliases: new[] { "-vf" },                           Fn: x => FileVerbose = x ),
+            // Flags            
+                new Handler (Aliases: new[] { "-v" },                            Fn: () => ConsoleVerbose = true ),
+                new Handler (Aliases: new[] { "--tencent", "-t" },               Fn: () => Tencent = true ),
+                new Handler (Aliases: new[] { "--ignore-warnings",
+                                               "--no-confirm", "-q" },           Fn: () => IgnoreWarnings = true ),
+                new Handler (Aliases: new[] { "--only-meta" },                   Fn: () => OnlyMeta = true)
+            };
 
-        private void ParseArgs(string[] raw_args)
-        {
             for (int i = 0; i < raw_args.Length; ++i)
             {
-                switch (raw_args[i])
-                {
-                case "--cert":
-                case "-c":
-                    this.cert_loc = raw_args[++i];
-                    break;
-                case "--keyset":
-                case "-k":
-                    this.keyset_loc = raw_args[++i];
-                    break;
-                case "--out":
-                case "--out-path":
-                case "-o":
-                    this.out_path = raw_args[++i];
-                    break;
-                case "--device-id":
-                case "-did":
-                    this.device_id = raw_args[++i];
-                    break;
-                case "--environment":
-                case "-env":
-                    this.env = raw_args[++i];
-                    break;
-                case "--server":
-                case "-s":
-                    this.server = raw_args[++i];
-                    break;
-                case "--platform":
-                case "-p":
-                    this.platform = raw_args[++i];
-                    break;
-                case "--firmware-version":
-                case "--fwver":
-                case "-fwver":
-                    this.firmware_version = raw_args[++i];
-                    break;
-                case "--tencent":
-                case "-t":
-                    this.tencent = true;
-                    break;
-                case "--get-info":
-                case "--info":
-                case "-i":
-                    this.get_info = true;
-                    break;
-                case "--latest":
-                case "--get-latest":
-                case "-l":
-                    this.get_latest = true;
-                    break;
-                case "--ignore-warnings":
-                case "--no-confirm":
-                case "-q":
-                    this.ignore_warnings = true;
-                    break;
-                case "--help":
-                case "-h":
-                    this.get_help = true;
-                    break;
-                }
+                var handler = Handlers.FirstOrDefault(x => x.Aliases.Contains(raw_args[i]));
+
+                if (handler is null)
+                    Console.WriteLine($"Warning: unknown arg {raw_args[i]}");
+                else
+                    handler.Invoke(handler.RequiresArg ? raw_args[++i] : null!);
             }
+
+            if (OperationMode is null)
+                return;
+
+            CertPath = Path.GetFullPath(CertPath);
+            KeysetPath = Path.GetFullPath(KeysetPath);
+            if (!String.IsNullOrEmpty(OutPath))
+                OutPath = Path.GetFullPath(OutPath);
+
+            // keysets are only needed for a full download
+            if (OperationMode == Mode.GetLatest)
+                Keyset = ExternalKeyReader.ReadKeyFile(KeysetPath);
         }
 
-        private void PrintHelp()
+        public static void PrintHelp()
         {
             Console.WriteLine(
                   "yui - a c# nintendo switch system update downloader\n"
@@ -120,20 +128,12 @@ namespace yui
                 + "                                                 Defaults to '~/.switch/prod.keys'\n"
                 + "--out|--out-path|-o  path                        Outpath for the --latest mode.\n"
                 + "                                                 Defaults to 'sysupdate-[intver]-[semver]_bn-[buildnum]'\n"
+                + "--jobs|-j    max jobs                            Max concurrent downloads, default is 5\n"
+                + "--titles     010000001000,0100000010001...       Only download specified titles, takes a comma separated list of title IDs\n"
+                + "-v                                               Verbose mode\n"
+                + "-vf          path/to/log.txt                     Verbose log to file\n"
+                + "--only-meta                                      Only download and parse meta entries\n"
             );
         }
-        private void InitStuff()
-        {
-            this.cert_loc = Path.GetFullPath(this.cert_loc);
-            this.keyset_loc = Path.GetFullPath(this.keyset_loc);
-            if (!String.IsNullOrEmpty(this.out_path))
-                this.out_path = Path.GetFullPath(this.out_path);
-            
-            // keysets are only needed for a full download
-            if (this.get_latest)
-                this.keyset = ExternalKeyReader.ReadKeyFile(keyset_loc);
-        }
     }
-
-
 }
