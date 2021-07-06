@@ -88,7 +88,7 @@ namespace yui
 			GetJson<UpdateInfo>($"{this.SunUrl}/system_update_meta?device_id={Config.DeviceID}");
 
 		public HttpResponseMessage GetUpdateMeta(string titleID, string titleVersion) =>
-			Get(String.Format("{0}/{1}/{2}/{3}/{4}?device_id={4}", CdnUrl, "t", (titleID == "0100000000000816") ? "s" : "a", titleID, titleVersion, Config.DeviceID));
+			Get(String.Format("{0}/{1}/{2}/{3}/{4}?device_id={5}", CdnUrl, "t", (titleID == "0100000000000816") ? "s" : "a", titleID, titleVersion, Config.DeviceID));
 
 		public HttpResponseMessage GetContent(string contentID) =>
 			Get(String.Format("{0}/c/c/{1}", CdnUrl, contentID));
